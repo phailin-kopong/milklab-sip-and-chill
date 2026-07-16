@@ -2,64 +2,58 @@ import argparse
 import os
 import sys
 import json
-import gspread
 import requests
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
 def append_to_sheet(menu: str, qty: int, price: float) -> dict:
-    """TODO 1: ใช้ gspread เปิด Sheet ของตัวเอง แล้ว append_row"""
-    creds_str = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
+    # 1. โหลด Creds จาก Environment
+    creds_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
     sheet_id = os.getenv("GOOGLE_SHEETS_ID")
+    if not creds_json or not sheet_id:
+        raise RuntimeError("ต้องตั้งค่า GOOGLE_SHEETS_CREDENTIALS และ GOOGLE_SHEETS_ID")
     
-    if not creds_str or not sheet_id:
-        raise RuntimeError("Missing GOOGLE_SHEETS_CREDENTIALS or GOOGLE_SHEETS_ID")
-        
-    gc = gspread.service_account_from_dict(json.loads(creds_str))
-    ws = gc.open_by_key(sheet_id).sheet1
+    # 2. เชื่อมต่อ Google Sheets
+    creds_dict = json.loads(creds_json)
+    creds = Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(sheet_id).sheet1
     
+    # 3. บันทึกข้อมูล
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     total = qty * price
-    ws.append_row([timestamp, menu, qty, price, total])
+    sheet.append_row([timestamp, menu, qty, price, total])
     
     return {"timestamp": timestamp, "menu": menu, "qty": qty, "price": price, "total": total}
 
 def send_notification(message: str) -> str:
-    """TODO 2: ส่ง message ไปยัง Telegram bot"""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    
     if not token or not chat_id:
-        raise RuntimeError("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
-        
+        raise RuntimeError("ไม่มี Telegram credentials")
+    
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    requests.post(url, data={"chat_id": chat_id, "text": message})
+    response = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=10)
+    if response.status_code != 200:
+        raise RuntimeError(f"Telegram error: {response.text}")
     return "telegram"
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="MilkLab Sales Logger")
-    parser.add_argument("--menu", required=True, help="ชื่อเมนู")
-    parser.add_argument("--qty", type=int, required=True, help="จำนวนขวด")
-    parser.add_argument("--price", type=float, required=True, help="ราคาต่อขวด")
+    parser.add_argument("--menu", required=True)
+    parser.add_argument("--qty", type=int, required=True)
+    parser.add_argument("--price", type=float, required=True)
     args = parser.parse_args()
 
     try:
-        # TODO 3: เรียก append_to_sheet แล้ว extract total
         row = append_to_sheet(args.menu, args.qty, args.price)
-        total = row["total"]
-    except Exception as exc:
-        print(f"[ERROR] บันทึก Sheet ล้มเหลว: {exc}", file=sys.stderr)
-        print("[HINT] ตรวจ GOOGLE_SHEETS_CREDENTIALS และ share Sheet กับ service account email", file=sys.stderr)
-        return 1
-
-    try:
-        # TODO 4: เรียก send_notification ด้วย message
-        provider = send_notification(f"บันทึก {args.menu} x{args.qty} = {total} บาท")
-    except Exception as exc:
-        print(f"[WARN] บันทึก Sheet สำเร็จแต่ส่งแจ้งเตือนล้มเหลว: {exc}", file=sys.stderr)
+        send_notification(f"บันทึก {args.menu} x{args.qty} = {row['total']} บาท")
+        print(f"[OK] บันทึกสำเร็จ: {row['total']} บาท")
         return 0
-
-    print(f"[OK] บันทึกและแจ้งเตือนผ่าน {provider} เรียบร้อย ยอด {total} บาท")
-    return 0
+    except Exception as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())
