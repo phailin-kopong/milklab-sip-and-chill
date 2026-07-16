@@ -64,3 +64,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+# ตัวอย่างแนวทางที่ต้องเขียนเพิ่ม
+import gspread
+# ... (การตั้งค่า credentials)
+ws = gc.open_by_key(os.getenv("GOOGLE_SHEETS_ID")).sheet1
+ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), menu, qty, price, total])
