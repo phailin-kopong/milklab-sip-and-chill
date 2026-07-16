@@ -2,6 +2,7 @@ name: Daily Sales Logger
 
 on:
   schedule:
+    # 13:00 UTC = 20:00 ICT (Thailand)
     - cron: '0 13 * * *'
   workflow_dispatch:
     inputs:
@@ -34,11 +35,30 @@ jobs:
       - name: Run sales_logger
         env:
           GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
-          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
         run: |
           python sales_logger.py \
             --menu "${{ github.event.inputs.menu || 'นมหมีฮอกไกโด' }}" \
             --qty ${{ github.event.inputs.qty || 1 }} \
             --price ${{ github.event.inputs.price || 65 }}
+- name: Run sales_logger
+        run: python sales_logger.py --menu "ชาเขียวเย็น" --qty 1 --price 50
+        env:
+          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          - name: Run sales_logger
+     env:
+       GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+       GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
+       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+     run: |
+       echo "Force running latest code"
+       python sales_logger.py \
+         --menu "${{ github.event.inputs.menu || 'นมหมีฮอกไกโด' }}" \
+         --qty ${{ github.event.inputs.qty || 1 }} \
+         --price ${{ github.event.inputs.price || 65 }}
