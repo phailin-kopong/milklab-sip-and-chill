@@ -1,39 +1,39 @@
-"""MilkLab Sales Logger (S2).
-
-Usage:
-    python sales_logger.py --menu "นมหมีฮอกไกโด" --qty 2 --price 65
-
-Reads GOOGLE_SHEETS_CREDENTIALS and TELEGRAM_BOT_TOKEN (or LINE_CHANNEL_TOKEN) from env.
-Appends row [timestamp, menu, qty, price, total] to a Google Sheet,
-then sends a notification via Telegram or LINE bot.
-
-นักศึกษาต้องเติม TODO ใน 4 จุดด้านล่างใน Session 2 Lab 1.3
-"""
-
 import argparse
 import os
 import sys
+import json
+import gspread
+import requests
 from datetime import datetime
 
-
 def append_to_sheet(menu: str, qty: int, price: float) -> dict:
-    """TODO 1: ใช้ gspread เปิด Sheet ของตัวเอง แล้ว append_row ด้วย [timestamp, menu, qty, price, total]
-
-    Returns dict {timestamp, menu, qty, price, total} ที่ append แล้ว
-    Raises RuntimeError ถ้า credentials ไม่มี หรือ Sheet ไม่ accessible
-    """
-    raise NotImplementedError("Implement in Session 2 Lab 1.3 (TODO 1)")
-
+    """TODO 1: ใช้ gspread เปิด Sheet ของตัวเอง แล้ว append_row"""
+    creds_str = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
+    sheet_id = os.getenv("GOOGLE_SHEETS_ID")
+    
+    if not creds_str or not sheet_id:
+        raise RuntimeError("Missing GOOGLE_SHEETS_CREDENTIALS or GOOGLE_SHEETS_ID")
+        
+    gc = gspread.service_account_from_dict(json.loads(creds_str))
+    ws = gc.open_by_key(sheet_id).sheet1
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    total = qty * price
+    ws.append_row([timestamp, menu, qty, price, total])
+    
+    return {"timestamp": timestamp, "menu": menu, "qty": qty, "price": price, "total": total}
 
 def send_notification(message: str) -> str:
-    """TODO 2: ส่ง message ไปยัง Telegram bot (ใช้ TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)
-    หรือ LINE bot (ใช้ LINE_CHANNEL_TOKEN) เลือกตัวใดตัวหนึ่ง
-
-    Returns: provider name ที่ใช้ ("telegram" หรือ "line")
-    Raises RuntimeError ถ้า no credentials
-    """
-    raise NotImplementedError("Implement in Session 2 Lab 1.3 (TODO 2)")
-
+    """TODO 2: ส่ง message ไปยัง Telegram bot"""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    
+    if not token or not chat_id:
+        raise RuntimeError("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
+        
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    requests.post(url, data={"chat_id": chat_id, "text": message})
+    return "telegram"
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="MilkLab Sales Logger")
@@ -52,7 +52,7 @@ def main() -> int:
         return 1
 
     try:
-        # TODO 4: เรียก send_notification ด้วย message ที่บอกยอดที่บันทึก
+        # TODO 4: เรียก send_notification ด้วย message
         provider = send_notification(f"บันทึก {args.menu} x{args.qty} = {total} บาท")
     except Exception as exc:
         print(f"[WARN] บันทึก Sheet สำเร็จแต่ส่งแจ้งเตือนล้มเหลว: {exc}", file=sys.stderr)
@@ -61,11 +61,5 @@ def main() -> int:
     print(f"[OK] บันทึกและแจ้งเตือนผ่าน {provider} เรียบร้อย ยอด {total} บาท")
     return 0
 
-
 if __name__ == "__main__":
     sys.exit(main())
-# ตัวอย่างแนวทางที่ต้องเขียนเพิ่ม
-import gspread
-# ... (การตั้งค่า credentials)
-ws = gc.open_by_key(os.getenv("GOOGLE_SHEETS_ID")).sheet1
-ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), menu, qty, price, total])
