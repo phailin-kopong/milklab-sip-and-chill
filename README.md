@@ -1,3 +1,9 @@
+---
+title: MilkLab RAG Chatbot
+sdk: streamlit
+sdk_version: 1.38.0
+app_file: app.py
+---
 # MilkLab° Solopreneur Starter (Course 69-1)
 
 Template repo สำหรับวิชา 31-407-106-406 : AI for Solopreneurs
