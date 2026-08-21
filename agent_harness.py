@@ -1,7 +1,7 @@
-"""MilkLab Agent Harness (S2).
+"""Cozy Toes Agent Harness (S4 Pivot).
 
 Usage:
-    python agent_harness.py --cmd "บันทึกขายนมหมี 2 ขวด ขวดละ 65"
+    python agent_harness.py --cmd "บันทึกขายถุงเท้ากีฬาหนานุ่ม ไซส์ M จำนวน 2 คู่ คู่ละ 120"
 
 รับคำสั่งภาษาไทย ส่งให้ Gemini พร้อม tool schema parse response เป็น tool call
 เรียก tool จริง print trace log
@@ -21,20 +21,21 @@ from google import genai
 TOOL_SCHEMA = [
     {
         "name": "log_sale",
-        "description": "บันทึกการขายลง Google Sheets และส่ง notification",
+        "description": "บันทึกการขายถุงเท้าลง Google Sheets และส่ง notification",
         "parameters": {
             "type": "object",
             "properties": {
-                "menu": {"type": "string", "description": "ชื่อเมนู"},
-                "qty": {"type": "integer", "description": "จำนวนที่ขาย"},
-                "price": {"type": "number", "description": "ราคาต่อหน่วย"},
+                "product": {"type": "string", "description": "ชื่อสินค้า (ถุงเท้า)"},
+                "size": {"type": "string", "description": "ไซส์ถุงเท้า เช่น S, M, L, Free Size"},
+                "qty": {"type": "integer", "description": "จำนวนคู่ที่ขาย"},
+                "price": {"type": "number", "description": "ราคาต่อคู่"},
             },
-            "required": ["menu", "qty", "price"],
+            "required": ["product", "size", "qty", "price"],
         },
     },
     {
         "name": "query_sales",
-        "description": "ดูยอดขายของวันที่ระบุ",
+        "description": "ดูยอดขายถุงเท้าของวันที่ระบุ",
         "parameters": {
             "type": "object",
             "properties": {
@@ -44,14 +45,14 @@ TOOL_SCHEMA = [
         },
     },
     {
-        "name": "send_alert",
-        "description": "ส่ง message แจ้งเตือนผ่าน Bot",
+        "name": "check_sock_size",
+        "description": "เช็กข้อมูลไซส์ถุงเท้าแต่ละประเภทจากระบบ",
         "parameters": {
             "type": "object",
             "properties": {
-                "message": {"type": "string"},
+                "product_type": {"type": "string", "description": "ประเภทถุงเท้าที่ลูกค้าสอบถามไซส์"},
             },
-            "required": ["message"],
+            "required": ["product_type"],
         },
     },
 ]
