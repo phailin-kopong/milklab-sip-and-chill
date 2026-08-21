@@ -1,0 +1,3 @@
+{"trace_id": "8e793be6-2a12-4bfa-8a42-a64b2a03ae7c", "timestamp": "2026-08-21T08:53:40.564493", "query": "มีเมนูนมวัวมั้ย", "spans": [{"name": "retrieve_top_k", "duration_sec": 0.042}, {"name": "generate_answer", "duration_sec": 35.5209}]}
+{"trace_id": "ec9dec8a-8024-489d-8928-96aca34af67d", "timestamp": "2026-08-21T08:54:50.138354", "query": "ฉันแพ้นมวัว", "spans": [{"name": "retrieve_top_k", "duration_sec": 0.0257}, {"name": "generate_answer", "duration_sec": 6.6917}]}
+{"trace_id": "db447406-92e1-4970-b612-c0537e376d62", "timestamp": "2026-08-21T08:55:24.428603", "query": "มีโปรโมชั่นมั้ย", "spans": [{"name": "retrieve_top_k", "duration_sec": 0.0271}, {"name": "generate_answer", "duration_sec": 4.1519}]}

@@ -1,131 +1,154 @@
-""MilkLab RAG Chatbot (S3).
-
-Run locally: streamlit run app.py
-Deploy: push to GitHub then Actions deploys to HuggingFace Space
-
-นักศึกษาต้องเติม TODO 5 จุด ใน Session 3 Lab 2.2
-"""
+# MilkLab RAG Chatbot(S3)
+# Run locally: streamlit run app.py
 
 import os
+import json
+import time
+import uuid
+from datetime import datetime
 
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
 import google.generativeai as genai
-import os
 
 # 1. ตั้งค่า API Key สำหรับ Gemini
-api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
-if api_key:
-    genai.configure(api_key=api_key)
-    llm = genai.GenerativeModel('gemini-1.5-flash')
-else:
-    st.error("กรุณาใส่ GEMINI_API_KEY ใน Streamlit Secrets")
+api_key = os.environ.get("GEMINI_API_KEY")
+
+# --- เติม 2 บรรทัดนี้เพื่อให้ระบบรู้จักตัวแปร llm ---
+genai.configure(api_key=api_key)
+llm = genai.GenerativeModel('gemini-3.6-flash')
+# ----------------------------------------
 
 # 2. ฟังก์ชันโหลด Embeddings และสร้าง FAISS Index
+
+
 @st.cache_resource
 def load_index():
-    """TODO 1+2+3: โหลด menu_kb.md, split เป็น chunk, encode ด้วย sentence-transformers,
-    สร้าง faiss index. Cache เพราะโหลด model ครั้งแรกใช้เวลา 30 วินาที
+    """TODO 1+2+3: โหลด menu_kb.md, split เป็น chunk, encode ด้วย sentence-transformers, สร้าง faiss index."""
+    # โหลด Embedding Model แบบรองรับภาษาไทย/Multilingual
+    model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
-    Returns: (model, index, chunks_list)
-    """
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 1-3)")
+    # อ่านไฟล์และทำ Text Splitting เป็น Chunks
+    try:
+        with open("menu_kb.md", "r", encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        st.error("ไม่พบไฟล์ menu_kb.md กรุณาสร้างไฟล์ข้อมูลก่อนครับ")
+        st.stop()
+
+    chunks = [c.strip() for c in text.split("\n\n") if len(c.strip()) > 10]
+
+    # สร้าง FAISS Index
+    embeddings = model.encode(chunks)
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dimension)
+    index.add(np.array(embeddings))
+
+    return model, index, chunks
 
 
 def retrieve_top_k(query: str, model, index, chunks: list[str], k: int = 3) -> list[str]:
     """TODO 4: encode query, search index, return top-k chunks"""
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 4)")
+    query_vec = model.encode([query])
+    distances, indices = index.search(np.array(query_vec), k)
+
+    # ดึงข้อความจาก chunks ตาม index ที่ FAISS ค้นหาเจอ
+    retrieved_chunks = [chunks[i] for i in indices[0] if i < len(chunks)]
+    return retrieved_chunks
 
 
 def generate_answer(query: str, context_chunks: list[str]) -> str:
-    """TODO 5: ส่ง query + context ไป Gemini, return answer
+    """TODO 5: ส่ง query + context ไป Gemini, return answer"""
+    # นำ Chunk มาต่อกัน
+    context = "\n---\n".join(context_chunks)
 
-    Hint: build prompt that says "ตอบจากข้อมูลต่อไปนี้เท่านั้น ถ้าไม่มีใน context ให้บอกว่าไม่รู้"
-    """
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 5)")
+    # สร้าง Prompt บังคับให้ตอบจาก Context เท่านั้น (ปรับคำพูดเมื่อหาไม่เจอที่นี่)
+    prompt = f"""คุณคือพนักงานต้อนรับและให้ข้อมูลของร้าน MilkLab 
+ตอบคำถามลูกค้าโดยอ้างอิงจากข้อมูล(Context)ด้านล่างนี้เท่านั้น 
+ถ้าในข้อมูลไม่มีคำตอบ ให้ตอบอย่างสุภาพว่า "ไม่มีค่ะ ขออภัยด้วยนะคะ" ห้ามเดาข้อมูลเองเด็ดขาด
+
+ข้อมูลของร้าน (Context):
+{context}
+
+คำถามจากลูกค้า: {query}
+"""
+    # ส่ง Prompt ไปยัง Gemini
+    response = llm.generate_content(prompt)
+    return response.text
 
 
 def main():
     st.set_page_config(page_title="MilkLab° RAG", page_icon="🥛")
     st.title("MilkLab° RAG Chatbot")
-    st.caption("ถามอะไรเกี่ยวกับ MilkLab ได้ ตอบจาก menu_kb.md")
+    st.caption("ถามอะไรเกี่ยวกับ MilkLab ได้ (ตอบจากฐานข้อมูล menu_kb.md)")
 
-def load_rag_components():
-    embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-    with open("menu_kb.md", "r", encoding="utf-8") as f:
-        text = f.read()
-    chunks = [c.strip() for c in text.split("\n\n") if len(c.strip()) > 10]
-    
-    embeddings = embedder.encode(chunks)
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(np.array(embeddings))
-    return embedder, index, chunks
-
-embedder, index, chunks = load_rag_components()
-
-# 3. Streamlit Chat UI
-st.title("MilkLab° RAG Chatbot")
-st.caption("ถามอะไรเกี่ยวกับ MilkLab ได้ ตอบจาก menu_kb.md")
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
-
-if prompt := st.chat_input("ถามข้อมูลร้าน MilkLab ได้เลยครับ..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").write(prompt)
-    
-    # 4. Retrieval (ดึง Top-3 Chunks)
-    query_vec = embedder.encode([prompt])
-    distances, indices = index.search(np.array(query_vec), 3)
-    retrieved_context = "\n---\n".join([chunks[i] for i in indices[0]])
-    
-    # 5. สร้าง Prompt และเรียก Gemini
-    full_prompt = f"""คุณคือพนักงานร้าน MilkLab ตอบคำถามลูกค้าโดยอ้างอิงจากข้อมูลต่อไปนี้เท่านั้น:
-{retrieved_context}
-
-คำถาม: {prompt}"""
-    
+    # โหลด RAG Components
     try:
         model, index, chunks = load_index()
-    except NotImplementedError as exc:
-        st.error(f"TODO not implemented: {exc}")
+    except Exception as exc:
+        st.error(f"เกิดข้อผิดพลาดในการโหลดระบบ: {exc}")
         st.stop()
 
+    # จัดการประวัติการแชท
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
+    # แสดงประวัติการแชทเก่า
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    if prompt := st.chat_input("ถามอะไรเกี่ยวกับ MilkLab"):
+    # รับคำถามใหม่จากผู้ใช้
+    if prompt := st.chat_input("ถามข้อมูลร้าน MilkLab ได้เลยครับ..."):
+        # เพิ่มและแสดงคำถามผู้ใช้
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
 
+        # ประมวลผลและตอบกลับ
         with st.chat_message("assistant"):
-            with st.spinner("กำลังค้นข้อมูล..."):
+            with st.spinner("กำลังค้นข้อมูลและคิดคำตอบ..."):
+
+                # --- สร้าง Trace ID สำหรับเก็บประวัติการทำงาน (Observability) ---
+                trace_id = str(uuid.uuid4())
+                trace_data = {
+                    "trace_id": trace_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "query": prompt,
+                    "spans": []
+                }
+
+                # --- Span 1: จับเวลา Retrieval ---
+                start_ret = time.time()
                 context = retrieve_top_k(prompt, model, index, chunks)
+                ret_duration = time.time() - start_ret
+                trace_data["spans"].append(
+                    {"name": "retrieve_top_k", "duration_sec": round(ret_duration, 4)})
+
+                # --- Span 2: จับเวลา Generate Answer (TODO 6) ---
+                start_gen = time.time()
                 answer = generate_answer(prompt, context)
+                gen_duration = time.time() - start_gen
+                trace_data["spans"].append(
+                    {"name": "generate_answer", "duration_sec": round(gen_duration, 4)})
+
+                # บันทึกประวัติลงไฟล์ traces.jsonl
+                with open("traces.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(trace_data, ensure_ascii=False) + "\n")
+
+            # แสดงคำตอบให้ผู้ใช้เห็น
             st.write(answer)
-            with st.expander("Source chunks"):
-                for i, c in enumerate(context, 1):
-                    st.markdown(f"**[{i}]** {c}")
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+
+            # แสดงกล่อง Trace ใต้คำตอบตามที่โจทย์ Session 3 กำหนด
+            with st.expander("🔍 Trace (Observability)"):
+                st.json(trace_data)
+
+        # บันทึกคำตอบลงประวัติ
+        st.session_state.messages.append(
+            {"role": "assistant", "content": answer})
 
 
 if __name__ == "__main__":
     main()
-        response = llm.generate_content(full_prompt)
-        reply = response.text
-    except Exception as e:
-        reply = f"เกิดข้อผิดพลาดในการเชื่อมต่อ Gemini: {e}"
-        
-    st.session_state.messages.append({"role": "assistant", "content": reply})
-    st.chat_message("assistant").write(reply)
