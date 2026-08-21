@@ -1,4 +1,4 @@
-# MilkLab RAG Chatbot(S3)
+# Cozy Toes RAG Chatbot (S4 Pivot)
 # Run locally: streamlit run app.py
 
 import os
@@ -11,36 +11,46 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
-import google.generativeai as genai
 
-# 1. ตั้งค่า API Key สำหรับ Gemini
+# นำเข้าโมดูล Gemini
+from google import genai
+
+# ==========================================
+# ดึง API Key อย่างปลอดภัย
+# ==========================================
 api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    try:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except (KeyError, FileNotFoundError):
+        pass
 
-# --- เติม 2 บรรทัดนี้เพื่อให้ระบบรู้จักตัวแปร llm ---
-genai.configure(api_key=api_key)
-llm = genai.GenerativeModel('gemini-3.6-flash')
-# ----------------------------------------
+if not api_key:
+    st.error("🚨 ไม่พบ API Key! กรุณาตั้งค่า GEMINI_API_KEY ไว้ใน Environment Variable หรือ Streamlit Secrets")
+    st.stop()
 
-# 2. ฟังก์ชันโหลด Embeddings และสร้าง FAISS Index
+# สร้าง Client โดยใช้ genai
+client = genai.Client(api_key=api_key)
 
 
+# ==========================================
+# ฟังก์ชันระบบ RAG
+# ==========================================
 @st.cache_resource
 def load_index():
-    """TODO 1+2+3: โหลด menu_kb.md, split เป็น chunk, encode ด้วย sentence-transformers, สร้าง faiss index."""
-    # โหลด Embedding Model แบบรองรับภาษาไทย/Multilingual
+    """โหลด cozytoes_kb.md, split เป็น chunk, encode ด้วย sentence-transformers, สร้าง faiss index."""
     model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
-    # อ่านไฟล์และทำ Text Splitting เป็น Chunks
+    # 🚨 เปลี่ยนชื่อไฟล์เป็นร้านถุงเท้า Cozy Toes
     try:
-        with open("menu_kb.md", "r", encoding="utf-8") as f:
+        with open("cozytoes_kb.md", "r", encoding="utf-8") as f:
             text = f.read()
     except FileNotFoundError:
-        st.error("ไม่พบไฟล์ menu_kb.md กรุณาสร้างไฟล์ข้อมูลก่อนครับ")
+        st.error("ไม่พบไฟล์ cozytoes_kb.md กรุณาสร้างไฟล์ข้อมูลก่อนครับ")
         st.stop()
 
     chunks = [c.strip() for c in text.split("\n\n") if len(c.strip()) > 10]
 
-    # สร้าง FAISS Index
     embeddings = model.encode(chunks)
     dimension = embeddings.shape[1]
     index = faiss.IndexFlatL2(dimension)
@@ -50,39 +60,45 @@ def load_index():
 
 
 def retrieve_top_k(query: str, model, index, chunks: list[str], k: int = 3) -> list[str]:
-    """TODO 4: encode query, search index, return top-k chunks"""
+    """ค้นหาข้อมูลที่เกี่ยวข้องที่สุดจากคำถาม"""
     query_vec = model.encode([query])
     distances, indices = index.search(np.array(query_vec), k)
 
-    # ดึงข้อความจาก chunks ตาม index ที่ FAISS ค้นหาเจอ
     retrieved_chunks = [chunks[i] for i in indices[0] if i < len(chunks)]
     return retrieved_chunks
 
 
 def generate_answer(query: str, context_chunks: list[str]) -> str:
-    """TODO 5: ส่ง query + context ไป Gemini, return answer"""
-    # นำ Chunk มาต่อกัน
+    """ส่ง query + context ไป Gemini, return answer"""
     context = "\n---\n".join(context_chunks)
 
-    # สร้าง Prompt บังคับให้ตอบจาก Context เท่านั้น (ปรับคำพูดเมื่อหาไม่เจอที่นี่)
-    prompt = f"""คุณคือพนักงานต้อนรับและให้ข้อมูลของร้าน MilkLab 
+    # 🚨 เปลี่ยน Prompt เป็นพนักงานร้านขายถุงเท้า Cozy Toes
+    prompt = f"""คุณคือพนักงานบริการลูกค้าของร้านขายถุงเท้าออนไลน์ Cozy Toes 
 ตอบคำถามลูกค้าโดยอ้างอิงจากข้อมูล(Context)ด้านล่างนี้เท่านั้น 
-ถ้าในข้อมูลไม่มีคำตอบ ให้ตอบอย่างสุภาพว่า "ไม่มีค่ะ ขออภัยด้วยนะคะ" ห้ามเดาข้อมูลเองเด็ดขาด
+ถ้าในข้อมูลไม่มีคำตอบ ให้ตอบอย่างสุภาพว่า "ไม่มีข้อมูลในส่วนนี้นะคะ ขออภัยด้วยค่ะ" ห้ามเดาข้อมูลเองเด็ดขาด
 
 ข้อมูลของร้าน (Context):
 {context}
 
 คำถามจากลูกค้า: {query}
 """
-    # ส่ง Prompt ไปยัง Gemini
-    response = llm.generate_content(prompt)
+    # ใช้โมเดล gemini-3.6-flash ตามที่เครื่องคุณรองรับ
+    response = client.models.generate_content(
+        model='gemini-3.6-flash',
+        contents=prompt
+    )
     return response.text
 
 
+# ==========================================
+# ส่วนแสดงผล Streamlit (UI)
+# ==========================================
 def main():
-    st.set_page_config(page_title="MilkLab° RAG", page_icon="🥛")
-    st.title("MilkLab° RAG Chatbot")
-    st.caption("ถามอะไรเกี่ยวกับ MilkLab ได้ (ตอบจากฐานข้อมูล menu_kb.md)")
+    # 🚨 เปลี่ยนหน้าตา UI เป็นร้าน Cozy Toes
+    st.set_page_config(page_title="Cozy Toes RAG", page_icon="🧦")
+    st.title("🧦 Cozy Toes RAG Chatbot")
+    st.caption(
+        "ถามข้อมูลไซส์ โปรโมชัน และถุงเท้าของ Cozy Toes ได้เลย (อ้างอิงจาก cozytoes_kb.md)")
 
     # โหลด RAG Components
     try:
@@ -91,27 +107,22 @@ def main():
         st.error(f"เกิดข้อผิดพลาดในการโหลดระบบ: {exc}")
         st.stop()
 
-    # จัดการประวัติการแชท
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # แสดงประวัติการแชทเก่า
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # รับคำถามใหม่จากผู้ใช้
-    if prompt := st.chat_input("ถามข้อมูลร้าน MilkLab ได้เลยครับ..."):
-        # เพิ่มและแสดงคำถามผู้ใช้
+    # 🚨 เปลี่ยนข้อความในช่องกรอกคำถาม
+    if prompt := st.chat_input("สอบถามเรื่องถุงเท้า ไซส์ หรือโปรโมชันจัดส่งได้เลยค่ะ..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
 
-        # ประมวลผลและตอบกลับ
         with st.chat_message("assistant"):
-            with st.spinner("กำลังค้นข้อมูลและคิดคำตอบ..."):
+            with st.spinner("กำลังหาข้อมูลถุงเท้าให้ค่ะ..."):
 
-                # --- สร้าง Trace ID สำหรับเก็บประวัติการทำงาน (Observability) ---
                 trace_id = str(uuid.uuid4())
                 trace_data = {
                     "trace_id": trace_id,
@@ -120,32 +131,26 @@ def main():
                     "spans": []
                 }
 
-                # --- Span 1: จับเวลา Retrieval ---
                 start_ret = time.time()
                 context = retrieve_top_k(prompt, model, index, chunks)
                 ret_duration = time.time() - start_ret
                 trace_data["spans"].append(
                     {"name": "retrieve_top_k", "duration_sec": round(ret_duration, 4)})
 
-                # --- Span 2: จับเวลา Generate Answer (TODO 6) ---
                 start_gen = time.time()
                 answer = generate_answer(prompt, context)
                 gen_duration = time.time() - start_gen
                 trace_data["spans"].append(
                     {"name": "generate_answer", "duration_sec": round(gen_duration, 4)})
 
-                # บันทึกประวัติลงไฟล์ traces.jsonl
                 with open("traces.jsonl", "a", encoding="utf-8") as f:
                     f.write(json.dumps(trace_data, ensure_ascii=False) + "\n")
 
-            # แสดงคำตอบให้ผู้ใช้เห็น
             st.write(answer)
 
-            # แสดงกล่อง Trace ใต้คำตอบตามที่โจทย์ Session 3 กำหนด
             with st.expander("🔍 Trace (Observability)"):
                 st.json(trace_data)
 
-        # บันทึกคำตอบลงประวัติ
         st.session_state.messages.append(
             {"role": "assistant", "content": answer})
 
